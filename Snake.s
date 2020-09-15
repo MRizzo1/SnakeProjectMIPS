@@ -9,13 +9,23 @@ snakeColor: 	.word	0x00c88a
 borderColor:    .word	0x6782fb	 	
 fruitColor: 	.word	0xfd71af
 charColor: 	.word   0xffffff
-backgroundColor: .word  0x000000   	 
+backgroundColor: .word  0x000000
+
+#Snake
+snakeHead:	.word   16, 16, 0x64, 0x64, 0 #Coordenada X, coordenada Y, direcci贸n a la que se debe mover, direcci贸n a la que se movia, puntuaci贸n
+snakeTail:	.word   16, 16, 0x64 #Coordenada X, coordenada Y, direcci贸n hacia la que se debe mover  
+
+#Fruta en pantalla
+fruit:	.word   1 	 
+
+.globl main, snakeHead
 
 .text
 
 main:
+
 ######################################################
-#---------------- T韙ulo del juego ------------------#
+#---------------- T铆tulo del juego ------------------#
 ######################################################
 
 ####### Letra S
@@ -114,14 +124,19 @@ main:
 	sw $a0, 0x100404f0
 	sw $a0, 0x100404f4
 	
-	
-
-
+######################################################
+#-------------------Dibujar serpiente------------------#
+######################################################
+	lw $a0, screenDimensions
+	lw $a1, snakeHead
+	lw $a2, snakeHead + 4
+	lw $a3, snakeColor
+	jal coordinate
+	sw $a3, 0($v0)
 
 ######################################################
 #-------------------Dibujar bordes------------------#
 ######################################################
-	lw $a0, screenDimensions
 	li $a1, 0
 	li $a2, 0
 	lw $a3, borderColor
@@ -150,28 +165,243 @@ border3Loop:
 	j border3Loop
 
 border4Loop:
-	beqz $a2, Init
+	beqz $a2, pantallaNegro
 	jal coordinate
 	sw $a3, 0($v0)
 	addi $a2, $a2, -1 #increment counter
 	j border4Loop
+
+######################################################
+#-------------------Limpiar t铆tulo------------------#
+######################################################
+
+pantallaNegro: 
+	lw $t0, backgroundColor
+	lw $a0, screenDimensions
+	li $a1, 1
+negroLoop:
+	li $a2, 1
+	addi $a1, $a1, 1
+	beq $a1, 10, init
+negroLoopi:
+	beq $a2, 31, negroLoop
+	jal coordinate
+	addi $a3, $v0, 0
+	sw $t0, 0($a3) #store color
+	addi $a2, $a2, 1 #increment counter
+	j negroLoopi
 	
-Init:  
-	j Init
+	
+######################################################
+#-------------------Movimiento------------------#
+######################################################
+init:  
+	lw $t0, snakeHead
+	lw $t1, snakeHead + 4
+	lw $t3, snakeTail
+	lw $t4, snakeTail + 4
+	lw $a0, screenDimensions
+	
+movimiento:
+	lw $t2, snakeHead + 8
+	lw $t6, snakeHead + 12
+	beq $t2, 0x61, izqMovimiento
+	beq $t2, 0x77, abjMovimiento
+	beq $t2, 0x73, arrMovimiento
+	bne $t2, 0x64, movimiento
+	
+	beq $t6, 0x61, noCambia
+	sw $t2, snakeHead + 12
+		
+	addi $t0, $t0, 1
+	addi $a1, $t1, 0
+	addi $a2, $t0, 0
+	jal coordinate
+	addi $t7, $v0, 0
+	
+	
+	addi $a0, $v0, 0
+	lw $a1, backgroundColor
+	lw $a2, fruitColor
+	jal choque
+	
+	beq $v0, 1, gameOver
+	
+	lw $t5, snakeColor
+	sw $t5, 0($t7)
+	
+	lw $a0, screenDimensions
+	addi $a1, $t4, 0
+	addi $a2, $t3, 0
+	jal coordinate
+	
+	lw $t5, fruitColor
+	sw $t5, 0($v0)
+	
+	addi $t3, $t3, 1
+	
+	j movimiento
+	
+izqMovimiento: 
+	beq $t6, 0x64, noCambia
+	sw $t2, snakeHead + 12
+
+	addi $t0, $t0, -1
+	addi $a1, $t1, 0
+	addi $a2, $t0, 0
+	jal coordinate
+	
+	lw $t5, snakeColor
+	sw $t5, 0($v0)
+	
+	addi $a1, $t4, 0
+	addi $a2, $t3, 0
+	jal coordinate
+	
+	lw $t5, fruitColor
+	sw $t5, 0($v0)
+	
+	addi $t3, $t3, -1
+	
+	j movimiento
+
+abjMovimiento: 
+	beq $t6, 0x73, noCambia
+	sw $t2, snakeHead + 12
+
+	addi $t1, $t1, -1
+	addi $a1, $t1, 0
+	addi $a2, $t0, 0
+	jal coordinate
+	
+	lw $t5, snakeColor
+	sw $t5, 0($v0)
+	
+	addi $a1, $t4, 0
+	addi $a2, $t3, 0
+	jal coordinate
+	
+	lw $t5, fruitColor
+	sw $t5, 0($v0)
+	
+	addi $t4, $t4, -1
+	
+	j movimiento		
+
+arrMovimiento: 
+	beq $t6, 0x77, noCambia
+	sw $t2, snakeHead + 12
+
+	addi $t1, $t1, 1
+	addi $a1, $t1, 0
+	addi $a2, $t0, 0
+	jal coordinate
+	
+	lw $t5, snakeColor
+	sw $t5, 0($v0)
+	
+	addi $a1, $t4, 0
+	addi $a2, $t3, 0
+	jal coordinate
+	
+	lw $t5, fruitColor
+	sw $t5, 0($v0)
+	
+	addi $t4, $t4, 1
+	
+	j movimiento		
+
+######################################################
+#------------- Condiciones de Movimiento ------------#
+######################################################
+
+noCambia: 
+	sw $t6, snakeHead + 8
+	j movimiento
+
+gameOver: 
+	j gameOver
+######################################################
+#------------- Condiciones de Choque ----------------#
+######################################################
+
+choque:
+	# Entrada
+	# $a0 -> direcci贸n de memoria de la coordenada a la que se mover谩 la serpiente.
+	# $a1 -> color del fondo.
+	# $a2 -> color de la fruta.
+	# Salida 
+	# $v0 -> 0 si no hay choque, 1 si choca consigo misma o un borde, 2 si choca con una fruta.
+	
+	#-------- planificacion de registros --------#
+	
+	# $s0 -> direcci贸n de memoria de la coordenada a la que se mover谩 la serpiente.
+	# $s1 -> color del fondo.
+	# $s2 -> color de la fruta.
+	# $s3 -> el contenido de la direcci贸n de memoria de la coordenada a la que se mover谩 la serpiente.
+	
+	# ---------------- prologo ----------------- #
+	
+	# almacenamos $fp, $ra y los registros $s usados en la pila. 
+	
+	addiu $sp, $sp, -24
+	sw $fp, 24($sp)
+	addiu $fp, $sp, 24
+	sw $ra, 20($sp)
+	sw $s0, 16($sp)
+	sw $s1, 12($sp)
+	sw $s2, 8($sp)
+	sw $s3, 4($sp)
+	
+	# ----------------- cuerpo ----------------- #
+	
+	addi $s0, $a0, 0 # movemos el argumento 1
+	addi $s1, $a1, 0 # movemos el argumento 2 
+	addi $s2, $a2, 0 # movemos el argumento 3
+	
+	lw $s3, 0($a0)
+	li $v0, 0
+	
+	beq $s1, $s3, epilogoChoque
+	beq $s2, $s3, frutaChoque
+	
+	li $v0, 1
+	j epilogoChoque
+
+frutaChoque: 
+	li $v0, 2	
+			
+	# ---------------- epilogo ----------------- #
+
+epilogoChoque:	
+	lw $fp, 24($sp)
+	lw $ra, 20($sp)
+	lw $s0, 16($sp)
+	lw $s1, 12($sp)
+	lw $s2, 8($sp)
+	lw $s3, 4($sp)
+	addiu $sp, $sp, 24
+		
+	jr $ra			# return $v0
+
+				
+######################################################
+#--------------------- Funciones --------------------#
+######################################################	
 
 coordinate:
 	# Entrada
 	# $a0 -> ancho de la pantalla que el mismo alto (screenDimensions).
-	# $a1 -> posici髇 en y.
-	# $a2 -> posici髇 en x.
+	# $a1 -> posici贸n en y.
+	# $a2 -> posici贸n en x.
 	# Salida 
-	# $v0 -> coordenada convertida en direcci髇 de memoria.
+	# $v0 -> coordenada convertida en direcci贸n de memoria.
 	
 	#-------- planificacion de registros --------#
 	
-	# $s0 -> ancho de la pantalla que el mismo alto (screenDimensions). Luego, almacena la coordenada como direcci髇 de memoria.
-	# $s1 -> posici髇 en y
-	# $s2 -> posici髇 en x.
+	# $s0 -> ancho de la pantalla que el mismo alto (screenDimensions). Luego, almacena la coordenada como direcci贸n de memoria.
+	# $s1 -> posici贸n en y
+	# $s2 -> posici贸n en x.
 	
 	# ---------------- prologo ----------------- #
 	
