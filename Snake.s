@@ -124,8 +124,10 @@ main:
 	sw $a0, 0x100404f0
 	sw $a0, 0x100404f4
 	
+
+	
 ######################################################
-#-------------------Dibujar serpiente------------------#
+#----------------- Dibujar serpiente ----------------#
 ######################################################
 	lw $a0, screenDimensions
 	lw $a1, snakeHead
@@ -191,11 +193,35 @@ negroLoopi:
 	addi $a2, $a2, 1 #increment counter
 	j negroLoopi
 	
+######################################################
+#----------------- Dibujar fruta ----------------#
+######################################################
+
+init:
+	li $v0, 42
+	li $a0, 1
+	li $a1, 31
+	syscall
+	addi $t0, $a0, 0 # posición en Y
+	
+	li $v0, 42
+	li $a0, 1
+	li $a1, 31
+	syscall
+	addi $t1, $a0, 0 # posición en X
+	
+	lw $a0, screenDimensions
+	addi $a1, $t0, 0
+	addi $a2, $t1, 0
+	lw $a3, fruitColor
+	jal coordinate
+	sw $a3, 0($v0)
+	
 	
 ######################################################
 #-------------------Movimiento------------------#
 ######################################################
-init:  
+  
 	lw $t0, snakeHead
 	lw $t1, snakeHead + 4
 	lw $t3, snakeTail
@@ -226,7 +252,8 @@ movimiento:
 	jal choque
 	
 	beq $v0, 1, gameOver
-	
+	beq $v0, 2, punto
+		
 	lw $t5, snakeColor
 	sw $t5, 0($t7)
 	
@@ -235,7 +262,7 @@ movimiento:
 	addi $a2, $t3, 0
 	jal coordinate
 	
-	lw $t5, fruitColor
+	lw $t5, backgroundColor
 	sw $t5, 0($v0)
 	
 	addi $t3, $t3, 1
@@ -250,15 +277,26 @@ izqMovimiento:
 	addi $a1, $t1, 0
 	addi $a2, $t0, 0
 	jal coordinate
+	addi $t7, $v0, 0
+	
+	
+	addi $a0, $v0, 0
+	lw $a1, backgroundColor
+	lw $a2, fruitColor
+	jal choque
+	
+	beq $v0, 1, gameOver
+	beq $v0, 2, punto
 	
 	lw $t5, snakeColor
-	sw $t5, 0($v0)
+	sw $t5, 0($t7)
 	
+	lw $a0, screenDimensions
 	addi $a1, $t4, 0
 	addi $a2, $t3, 0
 	jal coordinate
 	
-	lw $t5, fruitColor
+	lw $t5, backgroundColor
 	sw $t5, 0($v0)
 	
 	addi $t3, $t3, -1
@@ -273,15 +311,26 @@ abjMovimiento:
 	addi $a1, $t1, 0
 	addi $a2, $t0, 0
 	jal coordinate
+	addi $t7, $v0, 0
+	
+	
+	addi $a0, $v0, 0
+	lw $a1, backgroundColor
+	lw $a2, fruitColor
+	jal choque
+	
+	beq $v0, 1, gameOver
+	beq $v0, 2, punto
 	
 	lw $t5, snakeColor
-	sw $t5, 0($v0)
+	sw $t5, 0($t7)
 	
+	lw $a0, screenDimensions
 	addi $a1, $t4, 0
 	addi $a2, $t3, 0
 	jal coordinate
 	
-	lw $t5, fruitColor
+	lw $t5, backgroundColor
 	sw $t5, 0($v0)
 	
 	addi $t4, $t4, -1
@@ -296,20 +345,31 @@ arrMovimiento:
 	addi $a1, $t1, 0
 	addi $a2, $t0, 0
 	jal coordinate
+	addi $t7, $v0, 0
+	
+	
+	addi $a0, $v0, 0
+	lw $a1, backgroundColor
+	lw $a2, fruitColor
+	jal choque
+	
+	beq $v0, 1, gameOver
+	beq $v0, 2, punto
 	
 	lw $t5, snakeColor
-	sw $t5, 0($v0)
+	sw $t5, 0($t7)
 	
+	lw $a0, screenDimensions
 	addi $a1, $t4, 0
 	addi $a2, $t3, 0
 	jal coordinate
 	
-	lw $t5, fruitColor
+	lw $t5, backgroundColor
 	sw $t5, 0($v0)
 	
 	addi $t4, $t4, 1
 	
-	j movimiento		
+	j movimiento			
 
 ######################################################
 #------------- Condiciones de Movimiento ------------#
@@ -318,6 +378,11 @@ arrMovimiento:
 noCambia: 
 	sw $t6, snakeHead + 8
 	j movimiento
+
+
+######################################################
+#------------------- Game over ----------------------#
+######################################################
 
 gameOver: 
 	j gameOver
@@ -330,15 +395,17 @@ choque:
 	# $a0 -> dirección de memoria de la coordenada a la que se moverá la serpiente.
 	# $a1 -> color del fondo.
 	# $a2 -> color de la fruta.
+	# $a3 -> dirección que almacena cuantas frutas hay en pantalla.
 	# Salida 
 	# $v0 -> 0 si no hay choque, 1 si choca consigo misma o un borde, 2 si choca con una fruta.
 	
 	#-------- planificacion de registros --------#
 	
-	# $s0 -> dirección de memoria de la coordenada a la que se moverá la serpiente.
+	# $s0 -> dirección de memoria de la coordenada a la que se moverá la serpiente. Luego, 0 para indicar que no hay fruta si es el caso.
 	# $s1 -> color del fondo.
 	# $s2 -> color de la fruta.
-	# $s3 -> el contenido de la dirección de memoria de la coordenada a la que se moverá la serpiente.
+	# $s3 -> dirección que almacena cuantas frutas hay en pantalla.
+	# $s4 -> el contenido de la dirección de memoria de la coordenada a la que se moverá la serpiente.
 	
 	# ---------------- prologo ----------------- #
 	
@@ -358,17 +425,20 @@ choque:
 	addi $s0, $a0, 0 # movemos el argumento 1
 	addi $s1, $a1, 0 # movemos el argumento 2 
 	addi $s2, $a2, 0 # movemos el argumento 3
+	addi $s3, $a3, 0 # movemos el argumento 4
 	
-	lw $s3, 0($a0)
+	lw $s4, 0($a0)
 	li $v0, 0
 	
-	beq $s1, $s3, epilogoChoque
-	beq $s2, $s3, frutaChoque
+	beq $s1, $s4, epilogoChoque
+	beq $s2, $s4, frutaChoque
 	
 	li $v0, 1
 	j epilogoChoque
 
 frutaChoque: 
+	li $s0, 0
+	sw $s0, 0($s0)
 	li $v0, 2	
 			
 	# ---------------- epilogo ----------------- #
@@ -384,7 +454,98 @@ epilogoChoque:
 		
 	jr $ra			# return $v0
 
-				
+######################################################
+#--------------- Generar la fruta ------------------#
+######################################################	
+
+punto: 
+	lw $s0, snakeHead + 16
+	addi $s0, $s0, 1
+	sw $s0, snakeHead + 16
+	
+	lw $t5, snakeColor
+	sw $t5, 0($t7)
+	
+	lw $a0, screenDimensions
+	lw $a1, fruitColor
+	la $a2, fruit
+	jal generarFruta
+		
+	j movimiento
+	
+
+generarFruta:
+	# Entrada
+	# $a0 -> ancho de la pantalla que el mismo alto (screenDimensions).
+	# $a1 -> color de la fruta.
+	# $a2 -> dirección que almacena cuantas frutas hay en pantalla.
+	
+	#-------- planificacion de registros --------#
+	
+	# $s0 -> ancho de la pantalla que el mismo alto (screenDimensions). Luego comprueba que la fruta no caiga sobre la serpiente.
+	#	Al final, almacena la cuantas frutas hay en pantalla.
+	# $s1 -> color de la fruta.
+	# $s2 -> dirección que almacena cuantas frutas hay en pantalla.
+	# $s3 -> posición Y generada de manera random.
+	# $s4 -> posición X generada de manera random.
+	
+	# ---------------- prologo ----------------- #
+	
+	# almacenamos $fp, $ra y los registros $s usados en la pila. 
+	
+	addiu $sp, $sp, -20
+	sw $fp, 20($sp)
+	addiu $fp, $sp, 20
+	sw $ra, 16($sp)
+	sw $s0, 12($sp)
+	sw $s1, 8($sp)
+	sw $s2, 4($sp)
+	
+	# ----------------- cuerpo ----------------- #
+	
+	addi $s0, $a0, 0 # movemos el argumento 1
+	addi $s1, $a1, 0 # movemos el argumento 2 
+	addi $s2, $a2, 0 # movemos el argumento 3 
+	
+generarUbicacion:	
+	
+	li $v0, 42
+	li $a0, 1
+	li $a1, 31
+	syscall
+	addi $s3, $a0, 0 # posición en Y
+	
+	li $v0, 42
+	li $a0, 1
+	li $a1, 31
+	syscall
+	addi $s4, $a0, 0 # posición en X
+	
+	addi $a0, $s0, 0
+	addi $a1, $s3, 0
+	addi $a2, $s4, 0
+	jal coordinate
+	
+	lw $s0, 0($v0)
+	bnez $s0, generarUbicacion
+	
+	sw $s1, 0($v0)
+	
+	li $s0, 1
+	sw $s0, 0($s2) 
+	
+	# ---------------- epilogo ----------------- #
+
+	lw $fp, 20($sp)
+	lw $ra, 16($sp)
+	lw $s0, 12($sp)
+	lw $s1, 8($sp)
+	lw $s2, 4($sp)
+	addiu $sp, $sp, 20
+		
+	jr $ra			# return $v0
+	
+									
 ######################################################
 #--------------------- Funciones --------------------#
 ######################################################	
