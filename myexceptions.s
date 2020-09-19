@@ -130,8 +130,38 @@ ok_pc:
 # Don't skip instruction at EPC since it has not executed.
 	mfc0 $k0 $13
 	
+	
+	beq $k0, 0x100, teclado
+	nop
+	
+	mfc0 $k0, $9
+	
+	# ponemos el timer en cero
+	li $a0, 0
+	mtc0 $a0, $9
+	
+	bne $k0, 0x50, movidaTerminada
+	nop
+	
+	# El transmisor no está listo para imprimir
+	li $a0, 0x0
+	sw $a0, 0xffff0008
+	
+	b ret
+	nop
+	 
+movidaTerminada:	
+	
+	# el transmiter está en ready, por lo que se puede dibujar de nuevo
+	li $a0, 0x1
+	sw $a0, 0xffff0008
+	
+	b ret
+	nop
+	
+teclado:
 	lw $a0, 0xffff0004
-	sw $a0, snakeHead + 8
+	sw $a0, snakeHead + 12
 
 	
 	li   $a0, 0x10
@@ -186,16 +216,25 @@ __start:
 	## y de los valores del juego
 	
 	mfc0 $k0 $12		
-	ori  $k0 0x301		
+	ori  $k0 0x8301		
 	mtc0 $k0 $12
 	
-	li   $a0, 0x10
-	sw   $a0, 0xffff0000
+	# Se habilitan las interrupciones del teclado
+	li $a0, 0x10
+	sw $a0, 0xffff0000
+	
+	# El BitMap está listo para emprimir
+	li $a0, 0x1
+	sw $a0, 0xffff0008
 	
 	################################################################
 	# aqui puede acceder a las etiquetas definidas en el main como globales.
 	# por ejemplo:
 	
+	lw $s0, headColor 
+	lw $s1, snakeColor
+	lw $s2, backgroundColor
+	lw $s3, fruitColor
 	####################
 	
 
