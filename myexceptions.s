@@ -128,44 +128,32 @@ ok_pc:
 
 # Interrupt-specific code goes here!
 # Don't skip instruction at EPC since it has not executed.
-	mfc0 $k0 $13
+	mfc0 $k0, $13
 	
-	
+	# Se revisa si es interrupciÛn del timer o del teclado.
 	beq $k0, 0x100, teclado
 	nop
 	
-	mfc0 $k0, $9
+	# ponemos el timer en cero.
+	li $k0, 0
+	mtc0 $k0, $9
 	
-	# ponemos el timer en cero
-	li $a0, 0
-	mtc0 $a0, $9
-	
-	bne $k0, 0x50, movidaTerminada
-	nop
-	
-	# El transmisor no est√° listo para imprimir
-	li $a0, 0x0
-	sw $a0, 0xffff0008
-	
-	b ret
-	nop
-	 
-movidaTerminada:	
-	
-	# el transmiter est√° en ready, por lo que se puede dibujar de nuevo
-	li $a0, 0x1
-	sw $a0, 0xffff0008
-	
-	b ret
-	nop
-	
-teclado:
-	lw $a0, 0xffff0004
-	sw $a0, snakeHead + 12
+	# El transmisor no est· listo para imprimir algo, est· imprimiendo.
+	li $k0, 0x1
+	sw $k0, snakeHead + 20
 
 	
-	li   $a0, 0x10
-	sw   $a0, 0xffff0000
+	b ret
+	nop
+			
+teclado:
+	# Se almacena la nueva direcciÛn para moverse en el espacio designado en la cabeza de la serpiente.
+	lw $k0, 0xffff0004
+	sw $k0, snakeHead + 12
+
+	# La interrupciones de teclado quedan desabilitadas.
+	li $k0, 0x00
+	sw $k0, 0xffff0000
 
 ret:
 # Return from (non-interrupt) exception. Skip offending instruction
@@ -223,9 +211,6 @@ __start:
 	li $a0, 0x10
 	sw $a0, 0xffff0000
 	
-	# El BitMap est√° listo para emprimir
-	li $a0, 0x1
-	sw $a0, 0xffff0008
 	
 	################################################################
 	# aqui puede acceder a las etiquetas definidas en el main como globales.
@@ -235,6 +220,7 @@ __start:
 	lw $s1, snakeColor
 	lw $s2, backgroundColor
 	lw $s3, fruitColor
+	lw $s7, speed
 	####################
 	
 

@@ -1,8 +1,33 @@
+################################################################################################################
+#-------------------------------------------- Instrucciones ---------------------------------------------------#
+#													       #
+# Run speed de las instrucciones al máximo.								       #
+#													       #
+# Para jugar, hay que conectar el BitMap y el Keyboard and Display MMIO Simulator.			       #
+#													       #
+# Para mover la serpiente, se debe presionar la tecla mientra la misma no se dibuja, sino, el movimiento no se #
+# leerá.												       #
+#													       #
+# Los valores recomendados para el BitMap son:								       #
+#													       #
+################################################################################################################
+#													       #
+# Altura y ancho de los pixeles: 16									       #
+#													       #
+# Altura y ancho del display: 512 (Alargar la ventana del BitMap para ver el display completo.		       #
+#													       #
+# Base address for display: 0x100080000. El motivo es que no puede estar en los datos estáticos ni globales,   # 
+# tampoco en el heap porque ocupa el espacio de las estructuras dinámicas.				       #
+# No puede mapearse al MMIO porque ocupa los espacios correspondientes al teclado para interrumpir.	       #
+# 													       #
+################################################################################################################
+
+
 .data
 
 #Screen 
-screenDimensions: .word 32
-directionBitMap:  .word 0x10008000
+screenDimensions: .word 32 #Display / dimensiones de los pixeles.
+directionBitMap:  .word 0x10008000 # Dirección base para hacer display del BitMap
 
 #Colors
 snakeColor: 	.word	0x00c88a
@@ -13,13 +38,18 @@ charColor: 	.word   0xffffff
 backgroundColor: .word  0x000000
 
 #Snake
-snake:		.word   0 #DirecciÃ³n de la lista asociada a la serpiente
-snakeHead:	.word   18, 16, 0x64, 0x64, 0 #Coordenada X, coordenada Y, direcciÃ³n a la que se debe mover, direcciÃ³n a la que se movia 
+snake:		.word   0 #Dirección de la lista asociada a la serpiente
+snakeHead:	.word   18, 16, 0x64, 0x64, 0, 0 #Coordenada X, coordenada Y, dirección a la que se debe mover, dirección a la que se movía, puntuación, permiso para moverse. 
+speed:		.word   0x150, 0x125, 0x100 # Rapidez de la serpiente para moverse en los tres niveles.
 
 #Fruta en pantalla
-fruit:	.word   0 	 
+fruit:	.word   0 
 
-.globl main, snakeHead, charColor, snakeColor, borderColor, fruitColor, backgroundColor, headColor, screenDimensions
+#Mensajes importantes
+aumentoNivel: 	.asciiz   "Pasó de nivel. Su puntuación es de: "
+finMensaje:	.asciiz   "Terminó el juego. Su puntuación fue de: "		 
+
+.globl main, snakeHead, charColor, snakeColor, borderColor, fruitColor, backgroundColor, headColor, screenDimensions, speed
 .include "TadLista.s"
 .text
 
@@ -27,7 +57,7 @@ main:
 	
 
 ######################################################
-#---------------- TÃ­tulo del juego ------------------#
+#---------------- Título del juego ------------------#
 ######################################################
 
 ####### Letra S
@@ -286,7 +316,7 @@ border4Loop:
 	j border4Loop
 
 ######################################################
-#-------------------Limpiar tÃ­tulo------------------#
+#-------------------Limpiar título------------------#
 ######################################################
 
 pantallaNegro: 
@@ -331,32 +361,33 @@ init:
 ######################################################
   
 movimiento:
-	# Se pone en el registro compare un nÃºmero para generar interrupciÃ³n con el timer.
-	li $t0, 0x50
-	mtc0 $t0, $11
-
-	lw $t0,0xffff0008 
-	andi $t0, 0x1
-	beq $t0, 0, movimiento
 	
-	# Se pone en el registro compare un nÃºmero para generar interrupciÃ³n con el timer.
-	li $t0, 0x30
+	# Se pone en el registro compare un número para generar interrupción con el timer. 
+	# Esta es la velocidad de la serpiente. Un movimiento cada vez que el timer llegue al número indicado.
+	addi $t0, $s7, 0
+	mtc0 $t0, $11
+	
+	# Se carga el contenido de la dirección que almacena si la serpiente puede moverse o no. 
+	# Si es 1, puede; si no, sigue en el loop hasta que pueda.
+	lw $t1, snakeHead + 20
+	andi $t1, 0x1
+	
+	beq $t1, 0, movimiento
+	
+	li $t0, 0x0
 	mtc0 $t0, $11
 	
 	lw $t0, snakeHead # posicion en x de la cabeza
 	lw $t1, snakeHead + 4 # posicion en y de la cabeza
-	lw $t2, snakeHead + 8 # direcciÃ³n que llevaba la cabeza.
-	lw $t3, snakeHead + 12 # nueva direcciÃ³n.
-	
-	# Una vez que se tiene la direcciÃ³n del movimiento, la misma no se puede cambiar sino hasta que este se ejecute.
-	# Se desactivan las interrupciones de teclado.
-	###########
+	lw $t2, snakeHead + 8 # dirección que llevaba la cabeza.
+	lw $t3, snakeHead + 12 # nueva dirección.
 	
 	beq $t3, 0x61, izqMovimiento
 	beq $t3, 0x77, abjMovimiento
 	beq $t3 , 0x73, arrMovimiento
+	beq $t3 , 0x71, gameOver
 	
-	# Si la direciÃ³n de movimiento anterior era a la izquierda y la nueva es a la derecha, no se ejecuta el cambio de direcciÃ³n.
+	# Si la direción de movimiento anterior era a la izquierda y la nueva es a la derecha, no se ejecuta el cambio de dirección.
 	beq $t2, 0x61, noCambia
 		
 	# La cabeza se mueve un cuadro en x positivo.
@@ -364,53 +395,60 @@ movimiento:
 	sw $t0, snakeHead
 	
 dibujarCabeza:
-	lw $a0, snake # direcciÃ³n de la lista
+	lw $a0, snake # dirección de la lista
 	jal moverCuerpo
-	addi $s4, $v0, 0 #Se guarda la direcciÃ³n de memoria en la que estaba la cola
+	addi $s4, $v0, 0 #Se guarda la dirección de memoria en la que estaba la cola
 		
-	# La nueva direcciÃ³n es almacenada en la antigua.
+	# La nueva dirección es almacenada en la antigua.
 	sw $t3, snakeHead + 8
 	
-	# Se calcula la nueva posiciÃ³n de la cabeza como direcciÃ³n de memoria y se almacena como primer elemento de la lista.
+	# Se calcula la nueva posición de la cabeza como dirección de memoria y se almacena como primer elemento de la lista.
 	lw $a0, screenDimensions
 	lw $a1, directionBitMap
 	addi $a2, $t0, 0
 	addi $a3, $t1, 0
 	jal coordinate
 	
-	lw $t4, snake # direcciÃ³n cabeza de la lista
-	lw $t5, 0($t4) # ditrecciÃ³n primer elemento
-	addi $t6, $v0, 0 # nueva direcciÃ³n en memoria de la cabeza.
-	lw $t7, 0($t5) # antigua direcciÃ³n de la cabeza
-	sw $t6, 0($t5) # se actualiza en la lista la ubicaciÃ³n de la cabeza
+	lw $t4, snake # dirección cabeza de la lista
+	lw $t5, 0($t4) # ditrección primer elemento
+	addi $t6, $v0, 0 # nueva dirección en memoria de la cabeza.
+	lw $t7, 0($t5) # antigua dirección de la cabeza
+	sw $t6, 0($t5) # se actualiza en la lista la ubicación de la cabeza
 	
-	# Se comprueba que en la nueva direcciÃ³n no ocurra un choque (ya sea contra la misma serpiente, contra un borde 
+	# Se comprueba que en la nueva dirección no ocurra un choque (ya sea contra la misma serpiente, contra un borde 
 	# o contra una fruta)
 	addi $a0, $v0, 0
 	addi $a1, $s2, 0
 	addi $a2, $s3, 0
 	jal choque
 	
-	# Si se chocÃ³ con un borde o una serpiente, se acabÃ³ el juego.
-	# Si se chocÃ³ contra una fruta, aumenta el puntaje, se elimina la fruta en pantalla, crece la serpiente
+	# Si se chocó con un borde o una serpiente, se acabó el juego.
+	# Si se chocó contra una fruta, aumenta el puntaje, se elimina la fruta en pantalla, crece la serpiente
 	# y se spawnea una nueva fruta.
 	beq $v0, 1, gameOver
 	beq $v0, 2, punto
 				
-	# Si no hubo choque, se pinta la cabeza de la serpiente en la nueva posiciÃ³n.
+	# Si no hubo choque, se pinta la cabeza de la serpiente en la nueva posición.
 	sw $s0, 0($t6)
 	sw $s1, 0($t7)
 	
 	sw $s2, 0($s4) #Se borra la cola anterior
 	
-	# Se fuerza el timer a llegar al punto para generar una interrupciÃ³n
-	li $t0, 0x30
+	# Ya no se puede mover.
+	li $t0, 0x0
+	sw $t0, snakeHead + 20
+	
+	# El timer vuelve a 0.
 	mtc0 $t0, $9
+	
+	# Se permiten de nuevo las interrupciones de teclado.
+	li $t0, 0x10
+	sw $t0, 0xffff0000
 	
 	j movimiento
 	
 izqMovimiento: 
-	# Si la direciÃ³n de movimiento anterior era a la derecha y la nueva es a la izquierda, no se ejecuta el cambio de direcciÃ³n.
+	# Si la direción de movimiento anterior era a la derecha y la nueva es a la izquierda, no se ejecuta el cambio de dirección.
 	beq $t2, 0x64, noCambia
 		
 	# La cabeza se mueve un cuadro en x negativo.
@@ -420,7 +458,7 @@ izqMovimiento:
 	j dibujarCabeza
 
 abjMovimiento: 
-	# Si la direciÃ³n de movimiento anterior era a la arriba y la nueva es hacia abajo, no se ejecuta el cambio de direcciÃ³n.
+	# Si la direción de movimiento anterior era a la arriba y la nueva es hacia abajo, no se ejecuta el cambio de dirección.
 	beq $t2, 0x73, noCambia
 	
 	# La cabeza se mueve un cuadro en y negativo.
@@ -430,7 +468,7 @@ abjMovimiento:
 	j dibujarCabeza	
 
 arrMovimiento: 
-	# Si la direciÃ³n de movimiento anterior era a hacia abajo y la nueva es hacia arriba, no se ejecuta el cambio de direcciÃ³n.
+	# Si la direción de movimiento anterior era a hacia abajo y la nueva es hacia arriba, no se ejecuta el cambio de dirección.
 	beq $t2, 0x77, noCambia
 	
 	# La cabeza se mueve un cuadro en y positivo.
@@ -452,7 +490,16 @@ noCambia:
 ######################################################
 
 gameOver: 
-	j gameOver
+	li $v0, 4
+	la $a0, finMensaje
+	syscall
+	
+	li $v0, 1
+	lw $a0, snakeHead + 16
+	syscall
+
+	li $v0, 10
+	syscall
 	
 ######################################################
 #------------- Condiciones de Choque ----------------#
@@ -460,20 +507,20 @@ gameOver:
 
 choque:
 	# Entrada
-	# $a0 -> direcciÃ³n de memoria de la coordenada a la que se moverÃ¡ la serpiente.
+	# $a0 -> dirección de memoria de la coordenada a la que se moverá la serpiente.
 	# $a1 -> color del fondo.
 	# $a2 -> color de la fruta.
-	# $a3 -> direcciÃ³n que almacena cuantas frutas hay en pantalla.
+	# $a3 -> dirección que almacena cuantas frutas hay en pantalla.
 	# Salida 
 	# $v0 -> 0 si no hay choque, 1 si choca consigo misma o un borde, 2 si choca con una fruta.
 	
 	#-------- planificacion de registros --------#
 	
-	# $s0 -> direcciÃ³n de memoria de la coordenada a la que se moverÃ¡ la serpiente. Luego, 0 para indicar que no hay fruta si es el caso.
+	# $s0 -> dirección de memoria de la coordenada a la que se moverá la serpiente. Luego, 0 para indicar que no hay fruta si es el caso.
 	# $s1 -> color del fondo.
 	# $s2 -> color de la fruta.
-	# $s3 -> direcciÃ³n que almacena cuantas frutas hay en pantalla.
-	# $s4 -> el contenido de la direcciÃ³n de memoria de la coordenada a la que se moverÃ¡ la serpiente.
+	# $s3 -> dirección que almacena cuantas frutas hay en pantalla.
+	# $s4 -> el contenido de la dirección de memoria de la coordenada a la que se moverá la serpiente.
 	
 	# ---------------- prologo ----------------- #
 	
@@ -528,17 +575,23 @@ epilogoChoque:
 #--------------- Generar la fruta ------------------#
 ######################################################	
 
-punto: 
+punto:  
 	# Se aumenta el puntaje
 	lw $t0, snakeHead + 16
 	addi $t0, $t0, 1
 	sw $t0, snakeHead + 16
 	
-	# Se dibuja la cabeza donde deberÃ­a estar
+	# Se revisa el puntaje. Si es 10, entonces se pasa de nivel del 1 al 2.
+	# Si es 20, se pasa del nivel 2 al nivel 3.
+	beq $t0, 10, nivel2
+	beq $t0, 20, nivel3
+	
+crecimiento:	
+	# Se dibuja la cabeza donde debería estar
 	sw $s0, 0($t6)
 	sw $s1, 0($t7)
 	
-	# Se aÃ±ade un nuevo elemento a la lista
+	# Se añade un nuevo elemento a la lista
 	lw $a0, snake
 	addi $a1, $s4, 0
 	jal list_insertar
@@ -551,24 +604,56 @@ punto:
 		
 	j movimiento
 	
-
+nivel2: 
+	# Se aumenta la velocidad.
+	lw $t0, speed + 4
+	sw $t0, speed
+	
+	# Se imprime el mensaje de aumento de nivel y la puntuación.
+	li $v0, 4
+	la $a0, aumentoNivel
+	syscall
+	
+	li $v0, 1
+	lw $a0, snakeHead + 16
+	syscall
+	
+	j crecimiento
+	
+nivel3: 
+	# Se aumenta la velocidad.
+	lw $t0, speed + 8
+	sw $t0, speed
+	
+	# Se imprime el mensaje de aumento de nivel y la puntuación.
+	li $v0, 4
+	la $a0, aumentoNivel
+	syscall
+	
+	li $v0, 1
+	lw $a0, snakeHead + 16
+	syscall
+	
+	j crecimiento
+	
 generarFruta:
 	# Entrada
 	# $a0 -> ancho de la pantalla que el mismo alto (screenDimensions).
-	# $a1 -> direcciÃ³n en la que se mapea el BitMap
+	# $a1 -> dirección en la que se mapea el BitMap
 	# $a2 -> color de la fruta.
-	# $a3 -> direcciÃ³n que almacena cuantas frutas hay en pantalla.
+	# $a3 -> dirección que almacena cuantas frutas hay en pantalla.
 	
 	#-------- planificacion de registros --------#
 	
 	# $s0 -> ancho de la pantalla que el mismo alto (screenDimensions). Luego comprueba que la fruta no caiga sobre la serpiente.
 	#	Al final, almacena la cuantas frutas hay en pantalla.
-	# $s1 -> direcciÃ³n en la que se mapea el BitMap
+	# $s1 -> dirección en la que se mapea el BitMap
 	# $s2 -> color de la fruta. Cantidad de fruta nueva: 1.
-	# $s3 -> direcciÃ³n que almacena cuantas frutas hay en pantalla.
-	# $s4 -> posiciÃ³n X generada de manera random.
-	# $s5 -> El tamanaÃ±o de la pantalla menos uno para que no caiga en el borde. Luego, posiciÃ³n Y generada de manera random.
-	
+	# $s3 -> dirección que almacena cuantas frutas hay en pantalla.
+	# $s4 -> posición X generada de manera random.
+	# $s5 -> El tamaño de la pantalla menos uno para que no caiga en el borde. Luego, posición Y generada de manera random.
+	# $s6 -> El contenido de la dirección dada por las coordenadas X y Y.
+			
 	# ---------------- prologo ----------------- #
 	
 	# almacenamos $fp, $ra y los registros $s usados en la pila. 
@@ -598,21 +683,21 @@ generarUbicacion:
 	li $a0, 1
 	add $a1, $s5, 0
 	syscall
-	addi $s4, $a0, 0 # posiciÃ³n en X
+	addi $s4, $a0, 0 # posición en X
 	
 	li $v0, 42
 	li $a0, 1
 	syscall
-	addi $s5, $a0, 0 # posiciÃ³n en Y
+	addi $s5, $a0, 0 # posición en Y
 	
 	addi $a0, $s0, 0
 	addi $a1, $s1, 0
 	addi $a2, $s4, 0
 	addi $a3, $s5, 0
-	jal coordinate # Se transforman las coordenadas en direcciÃ³n de memoria.
+	jal coordinate # Se transforman las coordenadas en dirección de memoria.
 	
 	lw $s6, 0($v0)
-	bnez $s6, generarUbicacion # Si no estÃ¡ cayendo en el fondo, sino sobre la serpiente, se vuelve a generar otra ubicaciÃ³n.
+	bnez $s6, generarUbicacion # Si no está cayendo en el fondo, sino sobre la serpiente, se vuelve a generar otra ubicación.
 	
 	sw $s2, 0($v0) # Se dibuja la fruta.
 	
@@ -642,18 +727,18 @@ generarUbicacion:
 coordinate:
 	# Entrada
 	# $a0 -> ancho de la pantalla que el mismo alto (screenDimensions).
-	# $a1 -> direcciÃ³n en la que se mapea el bitmap.
-	# $a2 -> posiciÃ³n en x.
-	# $a3 -> posiciÃ³n en y.
+	# $a1 -> dirección en la que se mapea el bitmap.
+	# $a2 -> posición en x.
+	# $a3 -> posición en y.
 	# Salida 
-	# $v0 -> coordenada convertida en direcciÃ³n de memoria.
+	# $v0 -> coordenada convertida en dirección de memoria.
 	
 	#-------- planificacion de registros --------#
 	
-	# $s0 -> ancho de la pantalla que el mismo alto (screenDimensions). Luego, almacena la coordenada como direcciÃ³n de memoria.
-	# $s1 -> direcciÃ³n en la que se mapea el bitmap
-	# $s2 -> posiciÃ³n en x
-	# $s3 -> posiciÃ³n en y
+	# $s0 -> ancho de la pantalla que el mismo alto (screenDimensions). Luego, almacena la coordenada como dirección de memoria.
+	# $s1 -> dirección en la que se mapea el bitmap
+	# $s2 -> posición en x
+	# $s3 -> posición en y
 	
 	# ---------------- prologo ----------------- #
 	
@@ -678,7 +763,7 @@ coordinate:
 	mul $s0, $s0, $s3	# multiplicamos por y
 	add $s0, $s0, $s2	# sumamos x
 	mul $s0, $s0, 4		# multiplicamos por 4
-	addu $v0, $s0, $s1	# sumamos la direcciÃ³n de inicio de mapeo del BitMap
+	addu $v0, $s0, $s1	# sumamos la dirección de inicio de mapeo del BitMap
 	
 	# ---------------- epilogo ----------------- #
 
@@ -699,17 +784,17 @@ moverCuerpo:
 	# Entrada 
 	# $a0 -> direccion de la lista
 	# Salida
-	# $v0 -> antigua direcciÃ³n de la cola
+	# $v0 -> antigua dirección de la cola
 
 	#-------- planificacion de registros --------#
 	
-	# $s0 -> direcciÃ³n de la lista.
+	# $s0 -> dirección de la lista.
 	# $s1 -> longitud de la serpiente.
-	# $s2 -> direcciÃ³n a la que apunta la cabeza de la lista.
+	# $s2 -> dirección a la que apunta la cabeza de la lista.
 	# $s3 -> elemento del nodo.
-	# $s4 -> longitud de la lista. TambiÃ©n almacena, dado un nodo, la direcciÃ³n del siguiente (si hay)
+	# $s4 -> longitud de la lista. También almacena, dado un nodo, la dirección del siguiente (si hay)
 	# $s5 -> contenido del $s4
-	# $s6 -> direcciÃ³n del Ãºltimo elemento.
+	# $s6 -> dirección del último elemento.
 	
 	# ---------------- prologo ----------------- #
 	
@@ -738,7 +823,7 @@ moverCuerpo:
 	
 moverCuerpo_loop:
 	beqz $s1, moverCuerpo_end	
-	lw $s4, 4($s2) # direcciÃ³n del siguiente nodo.
+	lw $s4, 4($s2) # dirección del siguiente nodo.
 	lw $s5, 0($s4) # elemento del siguiente nodo
 	sw $s3, 0($s4) # pasar el elemento del nodo anterior al siguiente
 	
