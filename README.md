@@ -4,6 +4,7 @@ This is a project created in MIPS assembly language, making use of the Mars tool
 
 
 --------------------------- Instructions ---------------------------
+
 **You have to use Mars to run this project**
 1. Run speed of instructions at maximum.
 2. To play, you have to connect the BitMap and the Keyboard and Display MMIO Simulator.
