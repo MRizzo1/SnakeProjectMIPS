@@ -1,4 +1,4 @@
-# ProyectoSnake
+# SnakeProjectMIPS
 
 This is a project created in MIPS assembly language, making use of the Mars tool to generate a set of the little snake in a bitmap. Its purpose is solely educational, it was made for the computer architecture course (CI-3815) at Universidad Simón Bolívar (Venezuela). 
 
